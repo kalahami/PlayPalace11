@@ -78,7 +78,7 @@ def do_attack(
     defender: "PiratesPlayer",
     golden_moon_active: bool = False,
     global_xp_multiplier: float = 1.0,
-    gem_stealing: str = "with roll bonus"
+    gem_stealing: str = "with_roll_bonus"
 ) -> CombatResult:
     """
     Execute an attack between two players.
@@ -89,7 +89,7 @@ def do_attack(
         defender: The defending player
         golden_moon_active: Whether golden moon is active this turn
         global_xp_multiplier: Global XP multiplier from game options
-        gem_stealing: Gem stealing mode ("with roll bonus", "no roll bonus", or "disabled")
+        gem_stealing: Gem stealing mode ("with_roll_bonus", "no_roll_bonus", or "disabled")
 
     Returns:
         CombatResult with the outcome
@@ -244,8 +244,8 @@ def _handle_boarding(
         if choice == "steal":
             _attempt_gem_steal(
                 game, attacker, defender,
-                attack_bonus if gem_stealing == "with roll bonus" else 0,
-                defense_bonus if gem_stealing == "with roll bonus" else 0
+                attack_bonus if gem_stealing == "with_roll_bonus" else 0,
+                defense_bonus if gem_stealing == "with_roll_bonus" else 0
             )
             return
         elif choice in ("left", "right"):

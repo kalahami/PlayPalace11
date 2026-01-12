@@ -46,28 +46,38 @@ class PiratesOptions(GameOptions):
     """Game options for Pirates of the Lost Seas."""
 
     xp_multiplier: str = option_field(
-        default="Normal (1x)",
-        metadata=MenuOption(
-            label_key="pirates-option-xp-multiplier",
-            description_key="pirates-option-xp-multiplier-desc",
-            choices=[
-                "Quarter (0.25x)",
-                "Half (0.5x)",
-                "Normal (1x)",
-                "One and a Half (1.5x)",
-                "Double (2x)",
-                "Triple (3x)",
-            ],
-        ),
+        MenuOption(
+            default="normal",
+            value_key="multiplier",
+            choices=["quarter", "half", "normal", "one_and_half", "double", "triple"],
+            choice_labels={
+                "quarter": "pirates-xp-quarter",
+                "half": "pirates-xp-half",
+                "normal": "pirates-xp-normal",
+                "one_and_half": "pirates-xp-one-and-half",
+                "double": "pirates-xp-double",
+                "triple": "pirates-xp-triple",
+            },
+            label="pirates-set-xp-multiplier",
+            prompt="pirates-select-xp-multiplier",
+            change_msg="pirates-option-changed-xp",
+        )
     )
 
     gem_stealing: str = option_field(
-        default="with roll bonus",
-        metadata=MenuOption(
-            label_key="pirates-option-gem-stealing",
-            description_key="pirates-option-gem-stealing-desc",
-            choices=["with roll bonus", "no roll bonus", "disabled"],
-        ),
+        MenuOption(
+            default="with_roll_bonus",
+            value_key="mode",
+            choices=["with_roll_bonus", "no_roll_bonus", "disabled"],
+            choice_labels={
+                "with_roll_bonus": "pirates-stealing-with-bonus",
+                "no_roll_bonus": "pirates-stealing-no-bonus",
+                "disabled": "pirates-stealing-disabled",
+            },
+            label="pirates-set-gem-stealing",
+            prompt="pirates-select-gem-stealing",
+            change_msg="pirates-option-changed-stealing",
+        )
     )
 
 
@@ -966,15 +976,12 @@ class PiratesGame(Game):
 
     def _get_xp_multiplier(self) -> float:
         """Get the XP multiplier from game options."""
-        xp_str = self.options.xp_multiplier
-        if "0.25" in xp_str:
-            return 0.25
-        elif "0.5" in xp_str:
-            return 0.5
-        elif "1.5" in xp_str:
-            return 1.5
-        elif "2x" in xp_str:
-            return 2.0
-        elif "3x" in xp_str:
-            return 3.0
-        return 1.0
+        multipliers = {
+            "quarter": 0.25,
+            "half": 0.5,
+            "normal": 1.0,
+            "one_and_half": 1.5,
+            "double": 2.0,
+            "triple": 3.0,
+        }
+        return multipliers.get(self.options.xp_multiplier, 1.0)

@@ -1,3 +1,4 @@
+*.claude
 *.pyc
 server/.venv
 server/.ruff_cache

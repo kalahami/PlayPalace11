@@ -1,6 +1,6 @@
 *.claude
 *.pyc
-server/.venv
+*.venv
 server/.ruff_cache
 server/.pytest_cache
 server/playpalace.db

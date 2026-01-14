@@ -99,9 +99,9 @@ class NetworkManager:
                             "type": "authorize",
                             "username": username,
                             "password": password,
-                            "major": 10,
-                            "minor": 25,
-                            "patch": 1203,
+                            "major": 11,
+                            "minor": 0,
+                            "patch": 0,
                         }
                     )
                 )

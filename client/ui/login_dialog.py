@@ -66,7 +66,7 @@ class LoginDialog(wx.Dialog):
         sizer = wx.BoxSizer(wx.VERTICAL)
 
         # Title
-        title = wx.StaticText(self.panel, label="PlayPalace 10.25.1203")
+        title = wx.StaticText(self.panel, label="PlayPalace 11.")
         title_font = title.GetFont()
         title_font.PointSize += 4
         title_font = title_font.Bold()

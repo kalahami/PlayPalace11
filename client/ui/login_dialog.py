@@ -28,7 +28,7 @@ class LoginDialog(wx.Dialog):
         self.is_frozen = getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")
 
         # Main server URL
-        self.main_server_url = "wss://play-palace.ddns.net:8000"
+        self.main_server_url = "wss://localhost:8000"
 
         # If running as executable, force main server
         if self.is_frozen:
@@ -39,6 +39,7 @@ class LoginDialog(wx.Dialog):
         # Server options
         self.server_options = {
             "Local Server": "ws://localhost:8000",
+            "Random gaming": "wss://random-gaming.com:8000",
             "Over Internet": None,  # User will provide IP and port
         }
 

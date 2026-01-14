@@ -275,8 +275,14 @@ class ChaosBearGame(Game):
 
         alive_players = [p for p in self.players if p.alive and not p.is_spectator]
 
-        # Check if all alive players have moved this round
-        if self.players_moved_this_round >= len(alive_players):
+        # Increment round tracker for each player turn
+        self.players_moved_this_round += 1
+
+        # Advance to the next player
+        self.advance_turn(announce=False)
+
+        # Bear moves only after all players have taken their turn (wrap detected when index returns to 0)
+        if self.turn_index == 0:
             self._bear_turn()
             self.players_moved_this_round = 0
             self.round_number += 1
@@ -290,8 +296,6 @@ class ChaosBearGame(Game):
             if alive_players:
                 self.set_turn_players(alive_players)
 
-        # Advance to next player
-        self.advance_turn(announce=False)
         self._announce_turn()
 
         self.rebuild_all_menus()

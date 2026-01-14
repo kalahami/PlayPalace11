@@ -1034,6 +1034,7 @@ class MainWindow(wx.Frame):
     def on_server_disconnect(self, packet):
         """Handle server disconnect packet."""
         should_reconnect = packet.get("reconnect", False)
+        reason = packet.get("reason", "")
 
         if should_reconnect:
             # Server is restarting, reconnect after 3 seconds
@@ -1060,7 +1061,12 @@ class MainWindow(wx.Frame):
             wx.CallLater(3000, reconnect)
         else:
             # Explicit disconnect, close the client
-            self.speaker.speak("Disconnected.", interrupt=False)
+            # Show reason if provided
+            if reason:
+                wx.MessageBox(reason, "Connection Error", wx.OK | wx.ICON_ERROR)
+                self.speaker.speak(reason, interrupt=False)
+            else:
+                self.speaker.speak("Disconnected.", interrupt=False)
             wx.CallLater(500, self.Close)
 
     def _do_reconnect(self, server_url, username, password):

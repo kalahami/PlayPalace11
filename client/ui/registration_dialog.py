@@ -216,7 +216,7 @@ class RegistrationDialog(wx.Dialog):
         self.register_btn.Enable(True)
 
         # Check if it was successful
-        if "successfully" in message.lower() or "approval" in message.lower():
+        if "success" in message.lower() or "approval" in message.lower():
             wx.MessageBox(
                 message, "Registration Successful", wx.OK | wx.ICON_INFORMATION
             )

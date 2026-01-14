@@ -223,17 +223,14 @@ class Server:
 
         # Try to authenticate or register
         if not self._auth.authenticate(username, password):
-            # Try to register
-            if not self._auth.register(username, password):
-                # Username taken with different password
-                await client.send(
-                    {
-                        "type": "disconnect",
-                        "reason": "Invalid credentials",
-                        "reconnect": False,
-                    }
-                )
-                return
+            await client.send(
+                {
+                    "type": "disconnect",
+                    "reason": "Invalid credentials",
+                    "reconnect": False,
+                }
+            )
+            return
 
         # Authentication successful
         client.username = username

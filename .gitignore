@@ -9,3 +9,6 @@ server/playpalace.db
 client/build/
 client/dist/
 client/*.spec
+
+#potential web client
+web-client/*

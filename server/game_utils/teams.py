@@ -57,17 +57,19 @@ class TeamManager(DataClassJSONMixin):
         else:
             # Parse team mode like "2v2", "3v3", "2v2v2"
             team_sizes = self._parse_team_mode(self.team_mode)
-            player_idx = 0
+            num_teams = len(team_sizes)
 
-            for team_idx, size in enumerate(team_sizes):
-                members = []
-                for _ in range(size):
-                    if player_idx < len(player_names):
-                        name = player_names[player_idx]
-                        members.append(name)
-                        self._player_to_team[name] = team_idx
-                        player_idx += 1
+            # Create empty teams
+            team_members: list[list[str]] = [[] for _ in range(num_teams)]
 
+            # Round-robin assignment: player 0 -> team 0, player 1 -> team 1, etc.
+            for player_idx, name in enumerate(player_names):
+                team_idx = player_idx % num_teams
+                team_members[team_idx].append(name)
+                self._player_to_team[name] = team_idx
+
+            # Create team objects
+            for team_idx, members in enumerate(team_members):
                 team = Team(index=team_idx, members=members)
                 self.teams.append(team)
 

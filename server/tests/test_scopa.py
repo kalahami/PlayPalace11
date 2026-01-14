@@ -62,26 +62,28 @@ class TestTeamManager:
         assert tm.teams[2].members == ["Carol"]
 
     def test_2v2_mode(self):
-        """Test 2v2 team mode."""
+        """Test 2v2 team mode with round-robin assignment."""
         tm = TeamManager(team_mode="2v2")
         tm.setup_teams(["Alice", "Bob", "Carol", "Dave"])
         assert len(tm.teams) == 2
-        assert tm.teams[0].members == ["Alice", "Bob"]
-        assert tm.teams[1].members == ["Carol", "Dave"]
+        # Round-robin: Alice(0)->T0, Bob(1)->T1, Carol(2)->T0, Dave(3)->T1
+        assert tm.teams[0].members == ["Alice", "Carol"]
+        assert tm.teams[1].members == ["Bob", "Dave"]
 
     def test_get_team(self):
         """Test getting player's team."""
         tm = TeamManager(team_mode="2v2")
         tm.setup_teams(["Alice", "Bob", "Carol", "Dave"])
         assert tm.get_team("Alice").index == 0
-        assert tm.get_team("Carol").index == 1
+        assert tm.get_team("Bob").index == 1  # Round-robin: Bob is on team 1
 
     def test_get_teammates(self):
         """Test getting teammates."""
         tm = TeamManager(team_mode="2v2")
         tm.setup_teams(["Alice", "Bob", "Carol", "Dave"])
-        assert tm.get_teammates("Alice") == ["Bob"]
-        assert tm.get_teammates("Carol") == ["Dave"]
+        # Round-robin: Alice & Carol on team 0, Bob & Dave on team 1
+        assert tm.get_teammates("Alice") == ["Carol"]
+        assert tm.get_teammates("Bob") == ["Dave"]
 
     def test_team_scoring(self):
         """Test adding to team score."""
@@ -89,7 +91,7 @@ class TestTeamManager:
         tm.setup_teams(["Alice", "Bob", "Carol", "Dave"])
         tm.add_to_team_score("Alice", 5)
         assert tm.teams[0].total_score == 5
-        tm.add_to_team_score("Bob", 3)
+        tm.add_to_team_score("Carol", 3)  # Carol is on team 0 with Alice
         assert tm.teams[0].total_score == 8
 
     def test_team_modes_generation(self):
@@ -134,7 +136,7 @@ class TestScopaGameUnit:
         assert options.target_score == 11
         assert options.cards_per_deal == 3
         assert options.number_of_decks == 1
-        assert options.escoba_rules is False
+        assert options.escoba is False
         assert options.team_mode == "individual"
 
     def test_serialization(self):
@@ -220,7 +222,7 @@ class TestScopaCaptureLogic:
         ]
 
         # Playing a 7: need table cards that sum to 15-7=8, so 3+5=8
-        captures = find_captures(table_cards, 7, escoba_rules=True)
+        captures = find_captures(table_cards, 7, escoba=True)
         assert len(captures) >= 1
         found = False
         for capture in captures:
@@ -319,8 +321,9 @@ class TestScopaPlayTest:
         game.on_start()
 
         assert len(game.team_manager.teams) == 2
-        assert game.team_manager.teams[0].members == ["Bot0", "Bot1"]
-        assert game.team_manager.teams[1].members == ["Bot2", "Bot3"]
+        # Round-robin: Bot0->T0, Bot1->T1, Bot2->T0, Bot3->T1
+        assert game.team_manager.teams[0].members == ["Bot0", "Bot2"]
+        assert game.team_manager.teams[1].members == ["Bot1", "Bot3"]
 
         # Run game
         max_ticks = 10000

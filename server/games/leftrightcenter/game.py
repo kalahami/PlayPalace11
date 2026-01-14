@@ -290,7 +290,9 @@ class LeftRightCenterGame(Game):
                 count=left_count,
             )
             for _ in range(left_count):
-                self.schedule_sound("game_pig/turn.ogg", delay_ticks=sound_delay)
+                self.schedule_sound(
+                    "game_ninetynine/lose1_you.ogg", delay_ticks=sound_delay, pan=-50
+                )
                 sound_delay += 10
 
         if right_count:
@@ -303,7 +305,9 @@ class LeftRightCenterGame(Game):
                 count=right_count,
             )
             for _ in range(right_count):
-                self.schedule_sound("game_pig/turn.ogg", delay_ticks=sound_delay)
+                self.schedule_sound(
+                    "game_ninetynine/lose1_you.ogg", delay_ticks=sound_delay, pan=50
+                )
                 sound_delay += 10
 
         if center_count:
@@ -315,7 +319,9 @@ class LeftRightCenterGame(Game):
                 count=center_count,
             )
             for _ in range(center_count):
-                self.schedule_sound("game_ninetynine/lose1_you.ogg", delay_ticks=sound_delay)
+                self.schedule_sound(
+                    "game_ninetynine/lose1_other.ogg", delay_ticks=sound_delay
+                )
                 sound_delay += 10
 
         self._sync_team_scores()

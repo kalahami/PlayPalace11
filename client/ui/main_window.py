@@ -1432,15 +1432,83 @@ class MainWindow(wx.Frame):
         self.sound_manager.play("notify.ogg")
         self.add_history(f"{host} is hosting {game}.", "activity")
 
-    def compute_menu_diff(self, old_items, new_items):
+    def compute_menu_diff_by_id(self, old_items, new_items, old_ids, new_ids):
+        """
+        Compute minimal operations using item IDs to transform old_items into new_items.
+        This is much simpler and more reliable than text-based LCS diffing.
+
+        Returns list of operations: ('insert', index, text), ('delete', index), ('update', index, text)
+
+        Algorithm:
+        1. Build maps of IDs to (index, text) for old and new lists
+        2. Identify deleted IDs (in old but not new)
+        3. Identify inserted IDs (in new but not old)
+        4. Identify common IDs that may need text updates
+        5. Generate operations accordingly
+        """
+        operations = []
+
+        # Build ID maps: {id: (index, text)}
+        old_map = {}
+        for i, (item_id, text) in enumerate(zip(old_ids, old_items)):
+            if item_id is not None:
+                old_map[item_id] = (i, text)
+
+        new_map = {}
+        for i, (item_id, text) in enumerate(zip(new_ids, new_items)):
+            if item_id is not None:
+                new_map[item_id] = (i, text)
+
+        # Identify deleted, inserted, and common IDs
+        old_id_set = set(old_map.keys())
+        new_id_set = set(new_map.keys())
+
+        deleted_ids = old_id_set - new_id_set
+        inserted_ids = new_id_set - old_id_set
+        common_ids = old_id_set & new_id_set
+
+        # Generate delete operations (using old indices)
+        for item_id in deleted_ids:
+            old_index = old_map[item_id][0]
+            operations.append(("delete", old_index))
+
+        # Generate insert and update operations (using new indices)
+        for i, (new_id, new_text) in enumerate(zip(new_ids, new_items)):
+            if new_id is None:
+                continue
+
+            if new_id in inserted_ids:
+                # New item - insert it
+                operations.append(("insert", i, new_text))
+            elif new_id in common_ids:
+                # Existing item - check if text changed
+                old_text = old_map[new_id][1]
+                if old_text != new_text:
+                    operations.append(("update", i, new_text))
+
+        return operations
+
+    def compute_menu_diff(self, old_items, new_items, old_ids=None, new_ids=None):
         """
         Compute minimal operations to transform old_items into new_items.
         Returns list of operations: ('insert', index, text), ('delete', index), ('update', index, text)
+
+        If all items have IDs (old_ids and new_ids provided and no None values), use the simpler
+        ID-based algorithm. Otherwise fall back to LCS-based text diffing.
 
         For simplicity and screen reader friendliness:
         - If lists are same length, generate update operations for changed items
         - Otherwise use LCS-based diff for structural changes
         """
+        # Check if we can use ID-based diffing (all items have IDs)
+        if (old_ids is not None and new_ids is not None and
+            len(old_ids) == len(old_items) and len(new_ids) == len(new_items) and
+            all(item_id is not None for item_id in old_ids) and
+            all(item_id is not None for item_id in new_ids)):
+            # Use simpler ID-based algorithm
+            return self.compute_menu_diff_by_id(old_items, new_items, old_ids, new_ids)
+
+        # Fall back to text-based LCS algorithm
         operations = []
 
         # Simple case: same length, just update changed items
@@ -1546,6 +1614,9 @@ class MainWindow(wx.Frame):
                 items.append(str(item))
                 item_ids.append(None)
 
+        # Save old item IDs before updating (for diff algorithm)
+        old_item_ids = getattr(self, 'current_menu_item_ids', [])
+
         # Store item IDs for later use
         self.current_menu_item_ids = item_ids
 
@@ -1625,8 +1696,8 @@ class MainWindow(wx.Frame):
             # Preserve current selection
             old_selection = self.menu_list.GetSelection()
 
-            # Compute minimal diff
-            operations = self.compute_menu_diff(old_items, items)
+            # Compute minimal diff (pass IDs if available for simpler algorithm)
+            operations = self.compute_menu_diff(old_items, items, old_item_ids, item_ids)
 
             # Apply diff operations (screen reader friendly)
             new_selection = self.apply_menu_diff(operations, old_selection)

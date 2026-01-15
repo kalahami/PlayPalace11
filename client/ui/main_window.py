@@ -91,10 +91,10 @@ class MainWindow(wx.Frame):
         self.buffer_system.create_buffer("activity")
         self.buffer_system.create_buffer("misc")
 
-        # Load muted buffers from config
-        config = self._load_config()
-        if "muted_buffers" in config:
-            for buffer_name in config["muted_buffers"]:
+        # Load muted buffers from preferences
+        preferences = self._load_preferences()
+        if "muted_buffers" in preferences:
+            for buffer_name in preferences["muted_buffers"]:
                 if not self.buffer_system.is_muted(buffer_name):
                     self.buffer_system.toggle_mute(buffer_name)
 
@@ -1712,41 +1712,41 @@ class MainWindow(wx.Frame):
 
     # Config persistence methods
 
-    def _load_config(self):
+    def _load_preferences(self):
         """
-        Load configuration from ~/.playpalace/config.json
+        Load preferences from ~/.playpalace/preferences.json
 
         Returns:
-            Dict containing configuration, or empty dict if file doesn't exist
+            Dict containing preferences, or empty dict if file doesn't exist
         """
         config_dir = Path.home() / ".playpalace"
-        config_file = config_dir / "config.json"
+        preferences_file = config_dir / "preferences.json"
 
-        if config_file.exists():
+        if preferences_file.exists():
             try:
-                with open(config_file, "r") as f:
+                with open(preferences_file, "r") as f:
                     return json.load(f)
             except Exception:
-                # If config is corrupted, return empty dict
+                # If preferences is corrupted, return empty dict
                 return {}
         return {}
 
     def _save_muted_buffers(self):
-        """Save muted buffers to config file."""
+        """Save muted buffers to preferences file."""
         config_dir = Path.home() / ".playpalace"
-        config_file = config_dir / "config.json"
+        preferences_file = config_dir / "preferences.json"
 
-        # Load existing config
-        config = self._load_config()
+        # Load existing preferences
+        preferences = self._load_preferences()
 
         # Update muted buffers
-        config["muted_buffers"] = list(self.buffer_system.get_muted_buffers())
+        preferences["muted_buffers"] = list(self.buffer_system.get_muted_buffers())
 
         # Save
         config_dir.mkdir(parents=True, exist_ok=True)
         try:
-            with open(config_file, "w") as f:
-                json.dump(config, f, indent=2)
+            with open(preferences_file, "w") as f:
+                json.dump(preferences, f, indent=2)
         except Exception:
-            # Silently fail if we can't save config
+            # Silently fail if we can't save preferences
             pass

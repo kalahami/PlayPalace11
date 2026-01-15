@@ -115,13 +115,15 @@ class ClientOptionsDialog(wx.Dialog, uisound.SoundBindingsMixin):
         )
 
         server_info = self.config_manager.get_server_by_id(self.server_id)
-        current_nickname = server_info.get("nickname") or ""
+        current_name = server_info.get("name") or ""
 
-        self.nickname_input = wx.TextCtrl(panel, value=current_nickname, size=(300, -1))
+        self.nickname_input = wx.TextCtrl(panel, value=current_name, size=(300, -1))
         self.nickname_sizer.Add(self.nickname_input, 1, wx.EXPAND)
 
-        # Show server URL as hint
-        self.url_hint = wx.StaticText(panel, label=f"URL: {server_info['url']}")
+        # Show server address as hint
+        server_host = server_info.get("host", "")
+        server_port = server_info.get("port", "8000")
+        self.url_hint = wx.StaticText(panel, label=f"Address: {server_host}:{server_port}")
         font = self.url_hint.GetFont()
         font.PointSize -= 1
         self.url_hint.SetFont(font)
@@ -684,10 +686,9 @@ class ClientOptionsDialog(wx.Dialog, uisound.SoundBindingsMixin):
             # Save server-specific settings
             nickname = self.nickname_input.GetValue().strip()
 
-            # Save nickname (use None if empty to show URL as default)
-            self.config_manager.set_server_nickname(
-                self.server_id, nickname if nickname else None
-            )
+            # Save server name (use update_server to change the display name)
+            if nickname:
+                self.config_manager.update_server(self.server_id, name=nickname)
 
             # Save audio settings (as server-specific overrides)
             self.config_manager.set_client_option(

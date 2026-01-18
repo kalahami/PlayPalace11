@@ -28,6 +28,7 @@ class FarklePlayer(Player):
     current_roll: list[int] = field(default_factory=list)  # Dice available to take
     banked_dice: list[int] = field(default_factory=list)  # Dice taken this turn
     has_taken_combo: bool = False  # True after taking a combo (enables roll)
+    has_banked: bool = False  # True after banking for the first time
     # Stats tracking
     turns_taken: int = 0  # Number of turns completed (for avg points per turn)
     best_turn: int = 0  # Highest points banked in a single turn
@@ -39,13 +40,24 @@ class FarkleOptions(GameOptions):
 
     target_score: int = option_field(
         IntOption(
-            default=500,
-            min_val=500,
-            max_val=5000,
+            default=10000,
+            min_val=1000,
+            max_val=50000,
             value_key="score",
             label="farkle-set-target-score",
             prompt="farkle-enter-target-score",
             change_msg="farkle-option-changed-target",
+        )
+    )
+    min_bank_points: int = option_field(
+        IntOption(
+            default=500,
+            min_val=0,
+            max_val=5000,
+            value_key="points",
+            label="farkle-set-min-bank",
+            prompt="farkle-enter-min-bank",
+            change_msg="farkle-option-changed-min-bank",
         )
     )
 
@@ -57,11 +69,10 @@ COMBO_THREE_OF_KIND = "three_of_kind"
 COMBO_FOUR_OF_KIND = "four_of_kind"
 COMBO_FIVE_OF_KIND = "five_of_kind"
 COMBO_SIX_OF_KIND = "six_of_kind"
-COMBO_SMALL_STRAIGHT = "small_straight"
-COMBO_LARGE_STRAIGHT = "large_straight"
+COMBO_STRAIGHT = "straight"
 COMBO_THREE_PAIRS = "three_pairs"
 COMBO_DOUBLE_TRIPLETS = "double_triplets"
-COMBO_FULL_HOUSE = "full_house"
+COMBO_FOUR_KIND_PLUS_PAIR = "four_kind_pair"
 
 # Combo sounds
 COMBO_SOUNDS = {
@@ -71,11 +82,10 @@ COMBO_SOUNDS = {
     COMBO_FOUR_OF_KIND: "game_farkle/4kind.ogg",
     COMBO_FIVE_OF_KIND: "game_farkle/5kind.ogg",
     COMBO_SIX_OF_KIND: "game_farkle/6kind.ogg",
-    COMBO_LARGE_STRAIGHT: "game_farkle/largestraight.ogg",
-    COMBO_SMALL_STRAIGHT: "game_farkle/smallstraight.ogg",
+    COMBO_STRAIGHT: "game_farkle/largestraight.ogg",
     COMBO_THREE_PAIRS: "game_farkle/3pairs.ogg",
     COMBO_DOUBLE_TRIPLETS: "game_farkle/doubletriplets.ogg",
-    COMBO_FULL_HOUSE: "game_farkle/fullhouse.ogg",
+    COMBO_FOUR_KIND_PLUS_PAIR: "game_farkle/fullhouse.ogg",
 }
 
 
@@ -103,18 +113,10 @@ def has_combination(dice: list[int], combo_type: str, number: int = 0) -> bool:
         return counts[number] >= 5
     elif combo_type == COMBO_SIX_OF_KIND:
         return counts[number] == 6
-    elif combo_type == COMBO_LARGE_STRAIGHT:
+    elif combo_type == COMBO_STRAIGHT:
         if len(dice) != 6:
             return False
         return all(counts[i] == 1 for i in range(1, 7))
-    elif combo_type == COMBO_SMALL_STRAIGHT:
-        if len(dice) < 5:
-            return False
-        # Check for 1-2-3-4-5
-        has_1_5 = all(counts[i] >= 1 for i in range(1, 6))
-        # Check for 2-3-4-5-6
-        has_2_6 = all(counts[i] >= 1 for i in range(2, 7))
-        return has_1_5 or has_2_6
     elif combo_type == COMBO_THREE_PAIRS:
         if len(dice) != 6:
             return False
@@ -125,7 +127,7 @@ def has_combination(dice: list[int], combo_type: str, number: int = 0) -> bool:
             return False
         triplets = sum(1 for i in range(1, 7) if counts[i] == 3)
         return triplets == 2
-    elif combo_type == COMBO_FULL_HOUSE:
+    elif combo_type == COMBO_FOUR_KIND_PLUS_PAIR:
         if len(dice) != 6:
             return False
         has_quad = any(counts[i] == 4 for i in range(1, 7))
@@ -138,27 +140,25 @@ def has_combination(dice: list[int], combo_type: str, number: int = 0) -> bool:
 def get_combination_points(combo_type: str, number: int = 0) -> int:
     """Get point value for a combination."""
     if combo_type == COMBO_SINGLE_1:
-        return 10
-    elif combo_type == COMBO_SINGLE_5:
-        return 5
-    elif combo_type == COMBO_THREE_OF_KIND:
-        return 100 if number == 1 else number * 10
-    elif combo_type == COMBO_FOUR_OF_KIND:
-        return 200 if number == 1 else number * 20
-    elif combo_type == COMBO_FIVE_OF_KIND:
-        return 400 if number == 1 else number * 40
-    elif combo_type == COMBO_SIX_OF_KIND:
-        return 800 if number == 1 else number * 80
-    elif combo_type == COMBO_SMALL_STRAIGHT:
         return 100
-    elif combo_type == COMBO_LARGE_STRAIGHT:
-        return 200
+    elif combo_type == COMBO_SINGLE_5:
+        return 50
+    elif combo_type == COMBO_THREE_OF_KIND:
+        return 300 if number == 1 else number * 100
+    elif combo_type == COMBO_FOUR_OF_KIND:
+        return 1000
+    elif combo_type == COMBO_FIVE_OF_KIND:
+        return 2000
+    elif combo_type == COMBO_SIX_OF_KIND:
+        return 3000
+    elif combo_type == COMBO_STRAIGHT:
+        return 1500
     elif combo_type == COMBO_THREE_PAIRS:
-        return 150
+        return 1500
     elif combo_type == COMBO_DOUBLE_TRIPLETS:
-        return 250
-    elif combo_type == COMBO_FULL_HOUSE:
-        return 150
+        return 2500
+    elif combo_type == COMBO_FOUR_KIND_PLUS_PAIR:
+        return 1500
     return 0
 
 
@@ -177,16 +177,9 @@ def has_scoring_dice(dice: list[int]) -> bool:
     if any(counts[i] >= 3 for i in range(1, 7)):
         return True
 
-    # Large straight (1-2-3-4-5-6)
+    # Straight (1-2-3-4-5-6)
     if len(dice) == 6 and all(counts[i] == 1 for i in range(1, 7)):
         return True
-
-    # Small straight
-    if len(dice) >= 5:
-        has_1_5 = all(counts[i] >= 1 for i in range(1, 6))
-        has_2_6 = all(counts[i] >= 1 for i in range(2, 7))
-        if has_1_5 or has_2_6:
-            return True
 
     # Three pairs
     if len(dice) == 6:
@@ -230,25 +223,20 @@ def get_available_combinations(dice: list[int]) -> list[tuple[str, int, int]]:
             points = get_combination_points(COMBO_FOUR_OF_KIND, num)
             combinations.append((COMBO_FOUR_OF_KIND, num, points))
 
-    # Large straight
-    if has_combination(dice, COMBO_LARGE_STRAIGHT):
-        points = get_combination_points(COMBO_LARGE_STRAIGHT)
-        combinations.append((COMBO_LARGE_STRAIGHT, 0, points))
-
-    # Small straight
-    if has_combination(dice, COMBO_SMALL_STRAIGHT):
-        points = get_combination_points(COMBO_SMALL_STRAIGHT)
-        combinations.append((COMBO_SMALL_STRAIGHT, 0, points))
-
     # Double triplets (higher priority than three pairs)
     if has_combination(dice, COMBO_DOUBLE_TRIPLETS):
         points = get_combination_points(COMBO_DOUBLE_TRIPLETS)
         combinations.append((COMBO_DOUBLE_TRIPLETS, 0, points))
 
-    # Full house
-    if has_combination(dice, COMBO_FULL_HOUSE):
-        points = get_combination_points(COMBO_FULL_HOUSE)
-        combinations.append((COMBO_FULL_HOUSE, 0, points))
+    # Straight (1-2-3-4-5-6)
+    if has_combination(dice, COMBO_STRAIGHT):
+        points = get_combination_points(COMBO_STRAIGHT)
+        combinations.append((COMBO_STRAIGHT, 0, points))
+
+    # Four of a kind plus a pair
+    if has_combination(dice, COMBO_FOUR_KIND_PLUS_PAIR):
+        points = get_combination_points(COMBO_FOUR_KIND_PLUS_PAIR)
+        combinations.append((COMBO_FOUR_KIND_PLUS_PAIR, 0, points))
 
     # Three pairs
     if has_combination(dice, COMBO_THREE_PAIRS):
@@ -291,6 +279,9 @@ class FarkleGame(Game):
 
     players: list[FarklePlayer] = field(default_factory=list)
     options: FarkleOptions = field(default_factory=FarkleOptions)
+    final_round_score: int | None = None
+    final_round_leader_id: str | None = None
+    final_round_pending: set[str] = field(default_factory=set)
 
     @classmethod
     def get_name(cls) -> str:
@@ -344,6 +335,7 @@ class FarkleGame(Game):
             current_roll=[],
             banked_dice=[],
             has_taken_combo=False,
+            has_banked=False,
         )
 
     def create_turn_action_set(self, player: FarklePlayer) -> ActionSet:
@@ -425,26 +417,22 @@ class FarkleGame(Game):
             return Localization.get(
                 locale, "farkle-take-six-kind", number=number, points=points
             )
-        elif combo_type == COMBO_SMALL_STRAIGHT:
-            return Localization.get(
-                locale, "farkle-take-small-straight", points=points
-            )
-        elif combo_type == COMBO_LARGE_STRAIGHT:
-            return Localization.get(
-                locale, "farkle-take-large-straight", points=points
-            )
+        elif combo_type == COMBO_STRAIGHT:
+            return Localization.get(locale, "farkle-take-straight", points=points)
         elif combo_type == COMBO_THREE_PAIRS:
             return Localization.get(locale, "farkle-take-three-pairs", points=points)
         elif combo_type == COMBO_DOUBLE_TRIPLETS:
             return Localization.get(
                 locale, "farkle-take-double-triplets", points=points
             )
-        elif combo_type == COMBO_FULL_HOUSE:
-            return Localization.get(locale, "farkle-take-full-house", points=points)
+        elif combo_type == COMBO_FOUR_KIND_PLUS_PAIR:
+            return Localization.get(
+                locale, "farkle-take-four-kind-pair", points=points
+            )
         return f"{combo_type} for {points} points"
 
     def _get_combo_name(self, combo_type: str, number: int) -> str:
-        """Get the English name for a combo (for announcements). Matches v10 exactly."""
+        """Get the English name for a combo (for announcements)."""
         if combo_type == COMBO_SINGLE_1:
             return "Single 1"
         elif combo_type == COMBO_SINGLE_5:
@@ -457,16 +445,14 @@ class FarkleGame(Game):
             return f"Five {number}s"
         elif combo_type == COMBO_SIX_OF_KIND:
             return f"Six {number}s"
-        elif combo_type == COMBO_SMALL_STRAIGHT:
-            return "Small Straight"
-        elif combo_type == COMBO_LARGE_STRAIGHT:
-            return "Large Straight"
+        elif combo_type == COMBO_STRAIGHT:
+            return "Straight"
         elif combo_type == COMBO_THREE_PAIRS:
             return "Three pairs"
         elif combo_type == COMBO_DOUBLE_TRIPLETS:
             return "Double triplets"
-        elif combo_type == COMBO_FULL_HOUSE:
-            return "Full house"
+        elif combo_type == COMBO_FOUR_KIND_PLUS_PAIR:
+            return "Four of a kind plus a pair"
         return combo_type
 
     def update_scoring_actions(self, player: FarklePlayer) -> None:
@@ -562,28 +548,22 @@ class FarkleGame(Game):
         if player.is_spectator:
             return "action-spectator"
         farkle_player: FarklePlayer = player  # type: ignore
-        can_bank = farkle_player.turn_score > 0 and (
-            len(farkle_player.current_roll) == 0
-            or not has_scoring_dice(farkle_player.current_roll)
-        )
-        if not can_bank:
+        if len(farkle_player.current_roll) > 0 and not farkle_player.has_taken_combo:
+            return "farkle-must-take-combo"
+        if farkle_player.turn_score <= 0:
             return "farkle-cannot-bank"
+        min_required = max(1, self.options.min_bank_points)
+        if not farkle_player.has_banked and farkle_player.turn_score < min_required:
+            return "farkle-need-min-bank"
         return None
 
     def _is_bank_hidden(self, player: Player) -> Visibility:
         """Check if bank action is hidden."""
-        if self.status != "playing":
-            return Visibility.HIDDEN
-        if self.current_player != player:
-            return Visibility.HIDDEN
-        farkle_player: FarklePlayer = player  # type: ignore
-        can_bank = farkle_player.turn_score > 0 and (
-            len(farkle_player.current_roll) == 0
-            or not has_scoring_dice(farkle_player.current_roll)
+        return (
+            Visibility.VISIBLE
+            if self._is_bank_enabled(player) is None
+            else Visibility.HIDDEN
         )
-        if not can_bank:
-            return Visibility.HIDDEN
-        return Visibility.VISIBLE
 
     def _get_bank_label(self, player: Player, action_id: str) -> str:
         """Get dynamic label for bank action."""
@@ -709,11 +689,8 @@ class FarkleGame(Game):
         elif parts.startswith("six_of_kind"):
             combo_type = COMBO_SIX_OF_KIND
             number = int(parts.split("_")[-1])
-        elif parts.startswith("small_straight"):
-            combo_type = COMBO_SMALL_STRAIGHT
-            number = 0
-        elif parts.startswith("large_straight"):
-            combo_type = COMBO_LARGE_STRAIGHT
+        elif parts.startswith("straight"):
+            combo_type = COMBO_STRAIGHT
             number = 0
         elif parts.startswith("three_pairs"):
             combo_type = COMBO_THREE_PAIRS
@@ -721,8 +698,8 @@ class FarkleGame(Game):
         elif parts.startswith("double_triplets"):
             combo_type = COMBO_DOUBLE_TRIPLETS
             number = 0
-        elif parts.startswith("full_house"):
-            combo_type = COMBO_FULL_HOUSE
+        elif parts.startswith("four_kind_pair"):
+            combo_type = COMBO_FOUR_KIND_PLUS_PAIR
             number = 0
         else:
             return  # Unknown combo
@@ -763,69 +740,42 @@ class FarkleGame(Game):
         self, player: FarklePlayer, combo_type: str, number: int
     ) -> None:
         """Remove dice from current_roll for the given combination."""
-        counts = count_dice(player.current_roll)
+        dice_to_remove = self._collect_combo_dice(
+            player.current_roll, combo_type, number
+        )
+        if not dice_to_remove:
+            return
 
-        if combo_type == COMBO_SINGLE_1:
-            # Remove one 1
-            player.current_roll.remove(1)
-            player.banked_dice.append(1)
+        for die in dice_to_remove:
+            if die in player.current_roll:
+                player.current_roll.remove(die)
+                player.banked_dice.append(die)
 
-        elif combo_type == COMBO_SINGLE_5:
-            # Remove one 5
-            player.current_roll.remove(5)
-            player.banked_dice.append(5)
-
-        elif combo_type == COMBO_THREE_OF_KIND:
-            # Remove three of the number
-            for _ in range(3):
-                player.current_roll.remove(number)
-                player.banked_dice.append(number)
-
-        elif combo_type == COMBO_FOUR_OF_KIND:
-            # Remove four of the number
-            for _ in range(4):
-                player.current_roll.remove(number)
-                player.banked_dice.append(number)
-
-        elif combo_type == COMBO_FIVE_OF_KIND:
-            # Remove five of the number
-            for _ in range(5):
-                player.current_roll.remove(number)
-                player.banked_dice.append(number)
-
-        elif combo_type == COMBO_SIX_OF_KIND:
-            # Remove all six of the number
-            for _ in range(6):
-                player.current_roll.remove(number)
-                player.banked_dice.append(number)
-
-        elif combo_type == COMBO_LARGE_STRAIGHT:
-            # Remove all dice (1-6)
-            player.banked_dice.extend(player.current_roll)
-            player.current_roll = []
-
-        elif combo_type == COMBO_SMALL_STRAIGHT:
-            # Remove 5 dice for small straight
-            counts = count_dice(player.current_roll)
-            # Determine which straight we have
-            has_1_5 = all(counts[i] >= 1 for i in range(1, 6))
-            if has_1_5:
-                needed = [1, 2, 3, 4, 5]
-            else:
-                needed = [2, 3, 4, 5, 6]
-
-            for num in needed:
-                player.current_roll.remove(num)
-                player.banked_dice.append(num)
-
-        elif combo_type in (
+    def _collect_combo_dice(
+        self, dice: list[int], combo_type: str, number: int
+    ) -> list[int]:
+        """Return dice for the combo so they can be removed."""
+        counts = count_dice(dice)
+        if combo_type == COMBO_SINGLE_1 and counts[1] >= 1:
+            return [1]
+        if combo_type == COMBO_SINGLE_5 and counts[5] >= 1:
+            return [5]
+        if combo_type == COMBO_THREE_OF_KIND and counts[number] >= 3:
+            return [number] * 3
+        if combo_type == COMBO_FOUR_OF_KIND and counts[number] >= 4:
+            return [number] * 4
+        if combo_type == COMBO_FIVE_OF_KIND and counts[number] >= 5:
+            return [number] * 5
+        if combo_type == COMBO_SIX_OF_KIND and counts[number] >= 6:
+            return [number] * 6
+        if combo_type in (
+            COMBO_STRAIGHT,
             COMBO_THREE_PAIRS,
             COMBO_DOUBLE_TRIPLETS,
-            COMBO_FULL_HOUSE,
+            COMBO_FOUR_KIND_PLUS_PAIR,
         ):
-            # Remove all 6 dice
-            player.banked_dice.extend(player.current_roll)
-            player.current_roll = []
+            return list(dice)
+        return []
 
     def _action_bank(self, player: Player, action_id: str) -> None:
         """Handle bank action."""
@@ -838,6 +788,7 @@ class FarkleGame(Game):
 
         # Add turn score to permanent score
         farkle_player.score += farkle_player.turn_score
+        farkle_player.has_banked = True
 
         # Sync to TeamManager for score actions
         self._team_manager.add_to_team_score(player.name, farkle_player.turn_score)
@@ -850,6 +801,8 @@ class FarkleGame(Game):
             points=farkle_player.turn_score,
             total=farkle_player.score,
         )
+
+        self._maybe_start_or_update_final_round(farkle_player)
 
         # Reset turn state
         farkle_player.turn_score = 0
@@ -880,15 +833,60 @@ class FarkleGame(Game):
                 player, [Localization.get("en", "farkle-no-turn")]
             )
 
+    def _maybe_start_or_update_final_round(self, player: FarklePlayer) -> None:
+        """Track the current score to beat once someone reaches the target."""
+        if player.score < self.options.target_score:
+            return
+
+        if self.final_round_score is None or player.score > self.final_round_score:
+            self.final_round_score = player.score
+            self.final_round_leader_id = player.id
+            active_ids = {p.id for p in self.get_active_players()}
+            self.final_round_pending = active_ids - {player.id}
+
+    def _try_finish_final_round(self) -> bool:
+        """Return True if the game ends due to final-round completion."""
+        if self.final_round_score is None or self.final_round_leader_id is None:
+            return False
+        if self.final_round_pending:
+            return False
+
+        winner = next(
+            (
+                p
+                for p in self.get_active_players()
+                if p.id == self.final_round_leader_id
+            ),
+            None,
+        )
+        if not winner:
+            self.finish_game()
+            return True
+
+        self.play_sound("game_pig/win.ogg")
+        winner_farkle: FarklePlayer = winner  # type: ignore
+        self.broadcast_l(
+            "farkle-winner", player=winner.name, score=winner_farkle.score
+        )
+        self.finish_game()
+        return True
+
     def on_start(self) -> None:
         """Called when the game starts."""
         self.status = "playing"
         self.game_active = True
         self.round = 0
+        self.final_round_score = None
+        self.final_round_leader_id = None
+        self.final_round_pending = set()
 
         # Initialize turn order
         active_players = self.get_active_players()
-        self.set_turn_players(active_players)
+        starting_player = self._determine_starting_player(active_players)
+        start_index = active_players.index(starting_player)
+        turn_order = active_players[start_index:] + active_players[:start_index]
+        self.set_turn_players(turn_order)
+        self.broadcast_l("farkle-start-first-player", player=starting_player.name)
 
         # Set up TeamManager for score tracking (individual mode)
         self._team_manager.team_mode = "individual"
@@ -902,6 +900,7 @@ class FarkleGame(Game):
             farkle_p.current_roll = []
             farkle_p.banked_dice = []
             farkle_p.has_taken_combo = False
+            farkle_p.has_banked = False
 
         # Play intro music (using pig music as placeholder)
         self.play_music("game_pig/mus.ogg")
@@ -914,7 +913,15 @@ class FarkleGame(Game):
         self.round += 1
 
         # Refresh turn order
-        self.set_turn_players(self.get_active_players())
+        active_players = self.get_active_players()
+        if self.turn_players:
+            ordered = [p for p in self.turn_players if p in active_players]
+            for p in active_players:
+                if p not in ordered:
+                    ordered.append(p)
+            self.set_turn_players(ordered)
+        else:
+            self.set_turn_players(active_players)
 
         self.broadcast_l("game-round-start", round=self.round)
 
@@ -943,6 +950,26 @@ class FarkleGame(Game):
 
         # Rebuild menus
         self.rebuild_all_menus()
+
+    def _determine_starting_player(
+        self, players: list[FarklePlayer]
+    ) -> FarklePlayer:
+        """Roll to determine the first player, with tie rerolls."""
+        contenders = list(players)
+        while True:
+            rolls = {}
+            for player in contenders:
+                roll = random.randint(1, 6)
+                rolls[player.id] = roll
+                self.broadcast_l("farkle-start-roll", player=player.name, roll=roll)
+
+            high_roll = max(rolls.values())
+            top_players = [p for p in contenders if rolls[p.id] == high_roll]
+            if len(top_players) == 1:
+                return top_players[0]
+
+            self.broadcast_l("farkle-start-roll-tie")
+            contenders = top_players
 
     def on_tick(self) -> None:
         """Called every tick. Handle bot AI and scheduled sounds."""
@@ -978,23 +1005,16 @@ class FarkleGame(Game):
             if dice_remaining == 0:
                 dice_remaining = 6  # Hot dice
 
-            # Check if someone already reached target score
-            score_to_beat = None
-            for other in self.players:
-                if other != player:
-                    other_farkle: FarklePlayer = other  # type: ignore
-                    if other_farkle.score >= self.options.target_score:
-                        if score_to_beat is None or other_farkle.score > score_to_beat:
-                            score_to_beat = other_farkle.score
-
+            score_to_beat = self.final_round_score
             potential_total = player.score + player.turn_score
 
-            # If someone has already won, must beat them or bust trying
+            # If a final round is active, must beat the current leader
             if score_to_beat is not None and potential_total <= score_to_beat:
                 return "roll"
 
             # Banking decision based on turn score and dice remaining
-            if player.turn_score >= 35:
+            bank_threshold = max(350, self.options.min_bank_points)
+            if player.turn_score >= bank_threshold:
                 # Bank probability increases as fewer dice remain
                 bank_probabilities = {
                     6: 0.40,
@@ -1019,6 +1039,15 @@ class FarkleGame(Game):
 
     def _on_turn_end(self) -> None:
         """Handle end of a player's turn."""
+        current = self.current_player
+        if self.final_round_score is not None:
+            active_ids = {p.id for p in self.get_active_players()}
+            self.final_round_pending.intersection_update(active_ids)
+            if current and current.id in self.final_round_pending:
+                self.final_round_pending.remove(current.id)
+        if self._try_finish_final_round():
+            return
+
         # Check if round is over
         if self.turn_index >= len(self.turn_players) - 1:
             self._on_round_end()
@@ -1028,46 +1057,7 @@ class FarkleGame(Game):
 
     def _on_round_end(self) -> None:
         """Handle end of a round."""
-        # Check for winners
-        active_players = self.get_active_players()
-        winners = []
-        high_score = 0
-
-        for p in active_players:
-            farkle_p: FarklePlayer = p  # type: ignore
-            if farkle_p.score >= self.options.target_score:
-                if farkle_p.score > high_score:
-                    winners = [p]
-                    high_score = farkle_p.score
-                elif farkle_p.score == high_score:
-                    winners.append(p)
-
-        if len(winners) == 1:
-            # Single winner
-            self.play_sound("game_pig/win.ogg")
-            winner_farkle: FarklePlayer = winners[0]  # type: ignore
-            self.broadcast_l(
-                "farkle-winner", player=winners[0].name, score=winner_farkle.score
-            )
-            self.finish_game()
-        elif len(winners) > 1:
-            # Tie - announce winners
-            names = [w.name for w in winners]
-            for p in self.players:
-                user = self.get_user(p)
-                if user:
-                    names_str = Localization.format_list_and(user.locale, names)
-                    user.speak_l("farkle-winners-tie", players=names_str)
-
-            # Mark non-winners as spectators for tiebreaker
-            winner_names = [w.name for w in winners]
-            for p in active_players:
-                if p.name not in winner_names:
-                    p.is_spectator = True
-            self._start_round()
-        else:
-            # No winner yet
-            self._start_round()
+        self._start_round()
 
     def build_game_result(self) -> GameResult:
         """Build the game result with Farkle-specific data."""
@@ -1111,6 +1101,7 @@ class FarkleGame(Game):
                 "player_stats": player_stats,
                 "rounds_played": self.round,
                 "target_score": self.options.target_score,
+                "min_bank_points": self.options.min_bank_points,
             },
         )
 

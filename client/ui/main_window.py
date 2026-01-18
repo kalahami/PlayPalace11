@@ -91,10 +91,10 @@ class MainWindow(wx.Frame):
         self.buffer_system.create_buffer("activity")
         self.buffer_system.create_buffer("misc")
 
-        # Load muted buffers from config
-        config = self._load_config()
-        if "muted_buffers" in config:
-            for buffer_name in config["muted_buffers"]:
+        # Load muted buffers from preferences
+        preferences = self._load_preferences()
+        if "muted_buffers" in preferences:
+            for buffer_name in preferences["muted_buffers"]:
                 if not self.buffer_system.is_muted(buffer_name):
                     self.buffer_system.toggle_mute(buffer_name)
 
@@ -1438,15 +1438,83 @@ class MainWindow(wx.Frame):
         self.sound_manager.play("notify.ogg")
         self.add_history(f"{host} is hosting {game}.", "activity")
 
-    def compute_menu_diff(self, old_items, new_items):
+    def compute_menu_diff_by_id(self, old_items, new_items, old_ids, new_ids):
+        """
+        Compute minimal operations using item IDs to transform old_items into new_items.
+        This is much simpler and more reliable than text-based LCS diffing.
+
+        Returns list of operations: ('insert', index, text), ('delete', index), ('update', index, text)
+
+        Algorithm:
+        1. Build maps of IDs to (index, text) for old and new lists
+        2. Identify deleted IDs (in old but not new)
+        3. Identify inserted IDs (in new but not old)
+        4. Identify common IDs that may need text updates
+        5. Generate operations accordingly
+        """
+        operations = []
+
+        # Build ID maps: {id: (index, text)}
+        old_map = {}
+        for i, (item_id, text) in enumerate(zip(old_ids, old_items)):
+            if item_id is not None:
+                old_map[item_id] = (i, text)
+
+        new_map = {}
+        for i, (item_id, text) in enumerate(zip(new_ids, new_items)):
+            if item_id is not None:
+                new_map[item_id] = (i, text)
+
+        # Identify deleted, inserted, and common IDs
+        old_id_set = set(old_map.keys())
+        new_id_set = set(new_map.keys())
+
+        deleted_ids = old_id_set - new_id_set
+        inserted_ids = new_id_set - old_id_set
+        common_ids = old_id_set & new_id_set
+
+        # Generate delete operations (using old indices)
+        for item_id in deleted_ids:
+            old_index = old_map[item_id][0]
+            operations.append(("delete", old_index))
+
+        # Generate insert and update operations (using new indices)
+        for i, (new_id, new_text) in enumerate(zip(new_ids, new_items)):
+            if new_id is None:
+                continue
+
+            if new_id in inserted_ids:
+                # New item - insert it
+                operations.append(("insert", i, new_text))
+            elif new_id in common_ids:
+                # Existing item - check if text changed
+                old_text = old_map[new_id][1]
+                if old_text != new_text:
+                    operations.append(("update", i, new_text))
+
+        return operations
+
+    def compute_menu_diff(self, old_items, new_items, old_ids=None, new_ids=None):
         """
         Compute minimal operations to transform old_items into new_items.
         Returns list of operations: ('insert', index, text), ('delete', index), ('update', index, text)
+
+        If all items have IDs (old_ids and new_ids provided and no None values), use the simpler
+        ID-based algorithm. Otherwise fall back to LCS-based text diffing.
 
         For simplicity and screen reader friendliness:
         - If lists are same length, generate update operations for changed items
         - Otherwise use LCS-based diff for structural changes
         """
+        # Check if we can use ID-based diffing (all items have IDs)
+        if (old_ids is not None and new_ids is not None and
+            len(old_ids) == len(old_items) and len(new_ids) == len(new_items) and
+            all(item_id is not None for item_id in old_ids) and
+            all(item_id is not None for item_id in new_ids)):
+            # Use simpler ID-based algorithm
+            return self.compute_menu_diff_by_id(old_items, new_items, old_ids, new_ids)
+
+        # Fall back to text-based LCS algorithm
         operations = []
 
         # Simple case: same length, just update changed items
@@ -1552,6 +1620,9 @@ class MainWindow(wx.Frame):
                 items.append(str(item))
                 item_ids.append(None)
 
+        # Save old item IDs before updating (for diff algorithm)
+        old_item_ids = getattr(self, 'current_menu_item_ids', [])
+
         # Store item IDs for later use
         self.current_menu_item_ids = item_ids
 
@@ -1631,8 +1702,8 @@ class MainWindow(wx.Frame):
             # Preserve current selection
             old_selection = self.menu_list.GetSelection()
 
-            # Compute minimal diff
-            operations = self.compute_menu_diff(old_items, items)
+            # Compute minimal diff (pass IDs if available for simpler algorithm)
+            operations = self.compute_menu_diff(old_items, items, old_item_ids, item_ids)
 
             # Apply diff operations (screen reader friendly)
             new_selection = self.apply_menu_diff(operations, old_selection)
@@ -1718,41 +1789,41 @@ class MainWindow(wx.Frame):
 
     # Config persistence methods
 
-    def _load_config(self):
+    def _load_preferences(self):
         """
-        Load configuration from ~/.playpalace/config.json
+        Load preferences from ~/.playpalace/preferences.json
 
         Returns:
-            Dict containing configuration, or empty dict if file doesn't exist
+            Dict containing preferences, or empty dict if file doesn't exist
         """
         config_dir = Path.home() / ".playpalace"
-        config_file = config_dir / "config.json"
+        preferences_file = config_dir / "preferences.json"
 
-        if config_file.exists():
+        if preferences_file.exists():
             try:
-                with open(config_file, "r") as f:
+                with open(preferences_file, "r") as f:
                     return json.load(f)
             except Exception:
-                # If config is corrupted, return empty dict
+                # If preferences is corrupted, return empty dict
                 return {}
         return {}
 
     def _save_muted_buffers(self):
-        """Save muted buffers to config file."""
+        """Save muted buffers to preferences file."""
         config_dir = Path.home() / ".playpalace"
-        config_file = config_dir / "config.json"
+        preferences_file = config_dir / "preferences.json"
 
-        # Load existing config
-        config = self._load_config()
+        # Load existing preferences
+        preferences = self._load_preferences()
 
         # Update muted buffers
-        config["muted_buffers"] = list(self.buffer_system.get_muted_buffers())
+        preferences["muted_buffers"] = list(self.buffer_system.get_muted_buffers())
 
         # Save
         config_dir.mkdir(parents=True, exist_ok=True)
         try:
-            with open(config_file, "w") as f:
-                json.dump(config, f, indent=2)
+            with open(preferences_file, "w") as f:
+                json.dump(preferences, f, indent=2)
         except Exception:
-            # Silently fail if we can't save config
+            # Silently fail if we can't save preferences
             pass

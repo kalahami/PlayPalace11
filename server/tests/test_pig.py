@@ -370,6 +370,39 @@ class TestPigPlayTest:
             # Game should complete
             assert not game.game_active, f"Game with {sides}-sided dice should complete"
 
+    def test_team_mode_2v2_no_infinite_tiebreaker(self):
+        """Test that 2v2 mode doesn't trigger infinite tiebreaker when one team wins."""
+        random.seed(456)
+        game = PigGame(options=PigOptions(target_score=30, team_mode="2v2"))
+
+        # Create 4 bots
+        for i in range(4):
+            bot = Bot(f"Bot{i}")
+            game.add_player(f"Bot{i}", bot)
+
+        game.on_start()
+
+        # Verify teams are set up (2 teams of 2)
+        assert len(game._team_manager.teams) == 2
+        assert len(game._team_manager.teams[0].members) == 2
+        assert len(game._team_manager.teams[1].members) == 2
+
+        # Run until game ends (should not run forever)
+        max_ticks = 50000
+        ticks = 0
+        while game.game_active and ticks < max_ticks:
+            game.on_tick()
+            ticks += 1
+
+        # Game should finish (not trigger infinite tiebreaker)
+        assert not game.game_active, f"Game should finish, but ran for {ticks} ticks"
+        assert ticks < max_ticks, "Game ran too long, likely infinite tiebreaker bug"
+
+        # Verify one team won
+        winner = game._team_manager.get_leading_team()
+        assert winner is not None
+        assert winner.total_score >= game.options.target_score
+
 
 class TestPigPersistence:
     """Specific tests for game persistence."""

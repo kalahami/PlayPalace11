@@ -14,7 +14,7 @@ from ..registry import register_game
 from ...game_utils.actions import Action, ActionSet, Visibility
 from ...game_utils.bot_helper import BotHelper
 from ...game_utils.game_result import GameResult, PlayerResult
-from ...game_utils.options import IntOption, MenuOption, option_field
+from ...game_utils.options import IntOption, MenuOption, TeamModeOption, option_field
 from ...game_utils.teams import TeamManager
 from ...messages.localization import Localization
 from ...ui.keybinds import KeybindState
@@ -65,7 +65,7 @@ class PigOptions(GameOptions):
         )
     )
     team_mode: str = option_field(
-        MenuOption(
+        TeamModeOption(
             default="individual",
             value_key="mode",
             choices=lambda g, p: TeamManager.get_all_team_modes(2, 4),
@@ -266,6 +266,21 @@ class PigGame(Game):
         team = self._team_manager.get_team(player.name)
         return team.total_score if team else 0
 
+    def prestart_validate(self) -> list[str]:
+        """Validate game configuration before starting."""
+        errors = super().prestart_validate()
+
+        # Validate team mode for current player count
+        team_mode_error = self._validate_team_mode(self.options.team_mode)
+        if team_mode_error:
+            errors.append(team_mode_error)
+
+        # Ensure min_bank_points is less than target_score
+        if self.options.min_bank_points >= self.options.target_score:
+            errors.append("pig-error-min-bank-too-high")
+
+        return errors
+
     def on_start(self) -> None:
         """Called when the game starts."""
         self.status = "playing"
@@ -274,7 +289,12 @@ class PigGame(Game):
 
         # Set up teams based on active players
         active_players = self.get_active_players()
-        self._team_manager.team_mode = self.options.team_mode
+        # options.team_mode should be in internal format, but handle old display format for backwards compatibility
+        team_mode = self.options.team_mode
+        # If it contains spaces or uppercase (except 'v'), it's likely old display format
+        if " " in team_mode or any(c.isupper() for c in team_mode if c != "v"):
+            team_mode = TeamManager.parse_display_to_team_mode(team_mode)
+        self._team_manager.team_mode = team_mode
         self._team_manager.setup_teams([p.name for p in active_players])
 
         # Initialize turn order
@@ -403,39 +423,50 @@ class PigGame(Game):
 
     def _on_round_end(self) -> None:
         """Handle end of a round."""
-        # Check for winners (only among active players)
+        # Check for winners by checking teams, not individual players
+        # This prevents multiple teammates from all being counted as winners
         active_players = self.get_active_players()
-        winners = []
+        winning_teams = []
         high_score = 0
 
+        # Get teams that have reached the target score
+        teams_checked = set()
         for player in active_players:
-            score = self.get_player_score(player)
+            team = self._team_manager.get_team(player.name)
+            if not team or team.index in teams_checked:
+                continue
+            teams_checked.add(team.index)
+
+            score = team.total_score
             if score >= self.options.target_score:
                 if score > high_score:
-                    winners = [player]
+                    winning_teams = [team]
                     high_score = score
                 elif score == high_score:
-                    winners.append(player)
+                    winning_teams.append(team)
 
-        if len(winners) == 1:
-            # Single winner!
+        if len(winning_teams) == 1:
+            # Single winning team!
             self.play_sound("game_pig/win.ogg")
-            self.broadcast_l("pig-winner", player=winners[0].name)
+            winning_team = winning_teams[0]
+            team_name = self._team_manager.get_team_name(winning_team)
+            self.broadcast_l("pig-winner", player=team_name)
             self.finish_game()
-        elif len(winners) > 1:
+        elif len(winning_teams) > 1:
             # Tiebreaker! Start immediately (no delay)
-            names = [w.name for w in winners]
+            team_names = [self._team_manager.get_team_name(t) for t in winning_teams]
             # Format list with locale-aware "and"
             for player in self.players:
                 user = self.get_user(player)
                 if user:
-                    names_str = Localization.format_list_and(user.locale, names)
+                    names_str = Localization.format_list_and(user.locale, team_names)
                     user.speak_l("game-tiebreaker-players", players=names_str)
 
-            # Mark non-winners as spectators for the tiebreaker
-            winner_names = [w.name for w in winners]
+            # Mark players not on winning teams as spectators for the tiebreaker
+            winning_team_indices = {t.index for t in winning_teams}
             for p in active_players:
-                if p.name not in winner_names:
+                team = self._team_manager.get_team(p.name)
+                if not team or team.index not in winning_team_indices:
                     p.is_spectator = True
             self._start_round()
         else:

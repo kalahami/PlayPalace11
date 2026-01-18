@@ -246,6 +246,22 @@ class MenuOption(OptionMeta):
 
 
 @dataclass
+class TeamModeOption(MenuOption):
+    """
+    Menu option specifically for team modes.
+
+    Stores team modes in internal format ("individual", "2v2", "2v2v2")
+    but displays them in localized format ("Individual", "2 teams of 2").
+    """
+
+    def get_localized_choice(self, value: str, locale: str) -> str:
+        """Convert internal team mode format to localized display format."""
+        from .teams import TeamManager
+
+        return TeamManager.format_team_mode_for_display(value, locale)
+
+
+@dataclass
 class BoolOption(OptionMeta):
     """Boolean toggle option."""
 
@@ -349,14 +365,24 @@ class GameOptions(DataClassJSONMixin):
         return action_set
 
     def update_options_labels(self, game: "Game") -> None:
-        """Recreate options action sets for all players to reflect current values.
+        """Update options action sets for all players to reflect current values.
 
-        This replaces each player's options action set with a fresh one
-        containing the current option values in the labels.
+        Updates the existing action set in-place to avoid duplicates.
         """
         for player in game.players:
-            # Remove old options action set
-            game.remove_action_set(player, "options")
-            # Create fresh one with current values
-            new_options_set = self.create_options_action_set(game, player)
-            game.add_action_set(player, new_options_set)
+            # Find existing options action set
+            existing_set = game.get_action_set(player, "options")
+            if existing_set:
+                # Clear existing actions
+                existing_set._actions.clear()
+                existing_set._order.clear()
+                # Add updated actions with current values
+                locale = game.get_user(player).locale if game.get_user(player) else "en"
+                for name, meta in self.get_option_metas().items():
+                    current_value = getattr(self, name)
+                    action = meta.create_action(name, game, player, current_value, locale)
+                    existing_set.add(action)
+            else:
+                # Fallback: create and add new action set if it doesn't exist
+                new_options_set = self.create_options_action_set(game, player)
+                game.add_action_set(player, new_options_set)

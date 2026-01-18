@@ -26,6 +26,3 @@ pig-option-changed-dice = Dice now has { $sides } sides
 
 # Disabled reasons
 pig-need-more-points = You need more points to bank.
-
-# Validation errors
-pig-error-min-bank-too-high = Minimum bank points must be less than the target score.

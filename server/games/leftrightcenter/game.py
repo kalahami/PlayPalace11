@@ -202,7 +202,7 @@ class LeftRightCenterGame(Game):
         if self._check_for_winner():
             return
 
-        self._announce_turn_without_sound()
+        self.announce_turn()
         if isinstance(player, LeftRightCenterPlayer) and player.chips == 0:
             self.broadcast_l("lrc-no-chips", player=player.name)
             self.end_turn()
@@ -244,12 +244,12 @@ class LeftRightCenterGame(Game):
         lrc_player: LeftRightCenterPlayer = player  # type: ignore
 
         roll_count = min(3, lrc_player.chips)
-        self.play_sound("game_pig/roll.ogg")
 
         if roll_count == 0:
             # No chips: skip roll output entirely and move on
             self.end_turn()
             return
+        self.play_sound("game_pig/roll.ogg")
 
         faces = [random.choice(DICE_FACES) for _ in range(roll_count)]
         self._broadcast_roll_results(lrc_player, faces)
@@ -325,7 +325,7 @@ class LeftRightCenterGame(Game):
                 sound_delay += 10
 
         self._sync_team_scores()
-        self.end_turn()
+        self.end_turn(delay_ticks=sound_delay)
 
     def _check_for_winner(self) -> bool:
         active = self.get_active_players()
@@ -372,11 +372,16 @@ class LeftRightCenterGame(Game):
             return
         user.speak_l("lrc-center-pot", count=self.center_pot)
 
-    def end_turn(self) -> None:
-        """End the current turn with pacing similar to Pig."""
-        BotHelper.jolt_bots(self, ticks=random.randint(10, 15))
-        self.turn_delay_ticks = 40
-        self._pending_turn_advance = True
+    def end_turn(self, delay_ticks: int = 0) -> None:
+        """End the current turn with optional delay for turn resolution."""
+        current = self.current_player
+        if current and current.is_bot:
+            BotHelper.jolt_bot(current, ticks=random.randint(10, 15))
+        if delay_ticks > 0:
+            self.turn_delay_ticks = delay_ticks
+            self._pending_turn_advance = True
+            return
+        self._end_turn()
 
     def _sync_team_scores(self) -> None:
         """Mirror player chips into TeamManager totals for scoreboard output."""
@@ -394,11 +399,7 @@ class LeftRightCenterGame(Game):
         count = min(3, max(0, lrc_player.chips))
         return Localization.get(locale, "lrc-roll", count=count)
 
-    def _announce_turn_without_sound(self) -> None:
-        player = self.current_player
-        if not player:
-            return
-        self.broadcast_l("game-turn-start", player=player.name)
+    # Use default announce_turn() (includes per-user turn sound preference)
 
     def build_game_result(self) -> GameResult:
         active_players = self.get_active_players()

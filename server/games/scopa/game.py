@@ -21,7 +21,13 @@ from ...game_utils.cards import (
     sort_cards,
 )
 from ...game_utils.game_result import GameResult, PlayerResult
-from ...game_utils.options import IntOption, MenuOption, BoolOption, option_field
+from ...game_utils.options import (
+    IntOption,
+    MenuOption,
+    BoolOption,
+    TeamModeOption,
+    option_field,
+)
 from ...game_utils.teams import TeamManager
 from ...game_utils.round_timer import RoundTimer
 from ...messages.localization import Localization
@@ -118,7 +124,7 @@ class ScopaOptions(GameOptions):
         )
     )
     team_mode: str = option_field(
-        MenuOption(
+        TeamModeOption(
             default="individual",
             value_key="mode",
             choices=lambda g, p: TeamManager.get_all_team_modes(2, 6),
@@ -420,6 +426,36 @@ class ScopaGame(Game):
     # Game Flow
     # ==========================================================================
 
+    def prestart_validate(self) -> list[str | tuple[str, dict]]:
+        """Validate game configuration before starting."""
+        errors = super().prestart_validate()
+
+        # Validate team mode for current player count
+        team_mode_error = self._validate_team_mode(self.options.team_mode)
+        if team_mode_error:
+            errors.append(team_mode_error)
+
+        # Ensure there are enough cards in the deck for the initial deal
+        active_players = self.get_active_players()
+        num_players = len(active_players)
+        cards_per_deck = 40  # Italian deck
+        total_cards = cards_per_deck * self.options.number_of_decks
+        cards_needed = self.options.cards_per_deal * num_players
+
+        if cards_needed > total_cards:
+            errors.append((
+                "scopa-error-not-enough-cards",
+                {
+                    "decks": self.options.number_of_decks,
+                    "players": num_players,
+                    "cards_per_deal": self.options.cards_per_deal,
+                    "total_cards": total_cards,
+                    "cards_needed": cards_needed,
+                }
+            ))
+
+        return errors
+
     def on_start(self) -> None:
         """Called when the game starts."""
         self.status = "playing"
@@ -429,7 +465,12 @@ class ScopaGame(Game):
         # Setup teams
         active_players = self.get_active_players()
         player_names = [p.name for p in active_players]
-        self._team_manager.team_mode = self.options.team_mode
+        # options.team_mode should be in internal format, but handle old display format for backwards compatibility
+        team_mode = self.options.team_mode
+        # If it contains spaces or uppercase (except 'v'), it's likely old display format
+        if " " in team_mode or any(c.isupper() for c in team_mode if c != "v"):
+            team_mode = TeamManager.parse_display_to_team_mode(team_mode)
+        self._team_manager.team_mode = team_mode
         self._team_manager.setup_teams(player_names)
 
         # Initialize turn order
